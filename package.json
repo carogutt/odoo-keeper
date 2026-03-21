@@ -1,0 +1,24 @@
+{
+  "name": "odoo-keeper",
+  "version": "1.0.0",
+  "description": "Activates Odoo admin each week, to keep websites alive.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carogutt/odoo-keeper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/carogutt/odoo-keeper/issues"
+  },
+  "homepage": "https://github.com/carogutt/odoo-keeper#readme",
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}
