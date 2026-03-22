@@ -21,6 +21,10 @@ jobs:
       - name: Install deps
         run: |
           npm install
+          ls -la node_modules/.bin
+          chmod +x node_modules/.bin/playwright
+          chmod +x node_modules/.bin/playwright-core || true
+          npx playwright --version
           npx playwright install --with-deps
 
       - name: Run script
