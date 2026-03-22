@@ -38,12 +38,13 @@ const { chromium } = require('playwright');
 
     } catch (error) {
       console.error('PUBLIC_FAILED:', site.name);
+      console.error(error.message);
       hasError = true;
     }
 
     await page.close();
 
-    // --- LOGIN CHECK ---
+    // --- LOGIN / REACTIVATION CHECK ---
     const loginPage = await context.newPage();
 
     try {
@@ -52,30 +53,47 @@ const { chromium } = require('playwright');
         timeout: 30000,
       });
 
-      const content = await loginPage.content();
+      let content = await loginPage.content();
 
       console.log('--- LOGIN ---');
       console.log(site.name);
 
       if (content.includes('This database is currently locked')) {
-        throw new Error('ODOO_LOCKED');
-      }
+        console.log('ODOO_LOCKED');
 
-      if (content.includes('DNS_PROBE') || content.includes('This site can’t be reached')) {
+        const reactivateButton = loginPage.getByRole('button', { name: /reactivate/i });
+
+        await reactivateButton.click();
+        await loginPage.waitForLoadState('load', { timeout: 30000 });
+
+        content = await loginPage.content();
+
+        if (content.includes('Databases') && content.includes('Connect')) {
+          console.log('REACTIVATION_OK_DB_LIST');
+        } else if (
+          content.toLowerCase().includes('login') ||
+          content.toLowerCase().includes('email')
+        ) {
+          console.log('REACTIVATION_OK_LOGIN');
+        } else {
+          throw new Error('REACTIVATION_UNKNOWN_RESULT');
+        }
+
+      } else if (content.includes('DNS_PROBE') || content.includes('This site can’t be reached')) {
         throw new Error('DNS_ERROR');
-      }
 
-      if (content.includes('secure connection') || content.includes('Not secure')) {
+      } else if (content.includes('secure connection') || content.includes('Not secure')) {
         throw new Error('SSL_ERROR');
-      }
 
-      if (content.includes('Databases') && content.includes('Connect')) {
+      } else if (content.includes('Databases') && content.includes('Connect')) {
         console.log('ODOO_DB_LIST');
+
       } else if (
         content.toLowerCase().includes('login') ||
         content.toLowerCase().includes('email')
       ) {
         console.log('LOGIN_OK');
+
       } else {
         throw new Error('UNKNOWN_SCREEN');
       }
