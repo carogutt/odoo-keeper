@@ -25,14 +25,25 @@ const { chromium } = require('playwright');
 
       const status = response ? response.status() : 'no response';
       const finalUrl = page.url();
+      const title = await page.title();
+      const bodyText = await page.textContent('body');
 
       console.log('---');
       console.log('INPUT URL:', url);
       console.log('FINAL URL:', finalUrl);
       console.log('STATUS:', status);
+      console.log('TITLE:', title);
 
       if (!response || status >= 400) {
-        throw new Error(`Bad response`);
+        throw new Error('Bad response');
+      }
+
+      if (!title || title.length < 3) {
+        throw new Error('Empty or invalid title');
+      }
+
+      if (!bodyText || bodyText.trim().length < 50) {
+        throw new Error('Page seems empty');
       }
 
       console.log('CHECK_OK');
