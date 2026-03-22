@@ -18,7 +18,7 @@
     "url": "https://github.com/carogutt/odoo-keeper/issues"
   },
   "homepage": "https://github.com/carogutt/odoo-keeper#readme",
-  "dependencies": {
+  "devDependencies": {
     "playwright": "^1.58.2"
   }
 }
