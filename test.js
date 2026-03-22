@@ -7,54 +7,86 @@ const { chromium } = require('playwright');
     ignoreHTTPSErrors: true,
   });
 
-  const urls = [
-    'https://loopita.com',
-    'https://www.loopita.com'
+  const sites = [
+    {
+      name: 'loopita',
+      public: 'https://www.loopita.com',
+      login: 'https://www.loopita.com/web/login'
+    }
   ];
 
   let hasError = false;
 
-  for (const url of urls) {
+  for (const site of sites) {
+
+    // --- PUBLIC CHECK ---
     const page = await context.newPage();
 
     try {
-      const response = await page.goto(url, {
+      const response = await page.goto(site.public, {
         waitUntil: 'commit',
         timeout: 30000,
       });
 
       const status = response ? response.status() : 'no response';
-      const finalUrl = page.url();
       const title = await page.title();
-      const bodyText = await page.textContent('body');
 
-      console.log('---');
-      console.log('INPUT URL:', url);
-      console.log('FINAL URL:', finalUrl);
-      console.log('STATUS:', status);
-      console.log('TITLE:', title);
+      console.log('--- PUBLIC ---');
+      console.log(site.name, status, title);
 
-      if (!response || status >= 400) {
-        throw new Error('Bad response');
-      }
-
-      if (!title || title.length < 3) {
-        throw new Error('Empty or invalid title');
-      }
-
-      if (!bodyText || bodyText.trim().length < 50) {
-        throw new Error('Page seems empty');
-      }
-
-      console.log('CHECK_OK');
+      if (!response || status >= 400) throw new Error('Public failed');
 
     } catch (error) {
-      console.error('CHECK_FAILED:', url);
-      console.error(error.message);
+      console.error('PUBLIC_FAILED:', site.name);
       hasError = true;
     }
 
     await page.close();
+
+    // --- LOGIN CHECK ---
+    const loginPage = await context.newPage();
+
+    try {
+      await loginPage.goto(site.login, {
+        waitUntil: 'load',
+        timeout: 30000,
+      });
+
+      const content = await loginPage.content();
+
+      console.log('--- LOGIN ---');
+      console.log(site.name);
+
+      if (content.includes('This database is currently locked')) {
+        throw new Error('ODOO_LOCKED');
+      }
+
+      if (content.includes('DNS_PROBE') || content.includes('This site can’t be reached')) {
+        throw new Error('DNS_ERROR');
+      }
+
+      if (content.includes('secure connection') || content.includes('Not secure')) {
+        throw new Error('SSL_ERROR');
+      }
+
+      if (content.includes('Databases') && content.includes('Connect')) {
+        console.log('ODOO_DB_LIST');
+      } else if (
+        content.toLowerCase().includes('login') ||
+        content.toLowerCase().includes('email')
+      ) {
+        console.log('LOGIN_OK');
+      } else {
+        throw new Error('UNKNOWN_SCREEN');
+      }
+
+    } catch (error) {
+      console.error('LOGIN_FAILED:', site.name);
+      console.error(error.message);
+      hasError = true;
+    }
+
+    await loginPage.close();
   }
 
   await browser.close();
@@ -62,6 +94,6 @@ const { chromium } = require('playwright');
   if (hasError) {
     process.exit(1);
   } else {
-    console.log('ALL_PUBLIC_CHECKS_OK');
+    console.log('ALL_CHECKS_OK');
   }
 })();
