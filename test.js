@@ -2,32 +2,55 @@ const { chromium } = require('playwright');
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
 
-  const url = 'https://www.loopita.com';
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+  });
 
-  try {
-    const response = await page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
+  const urls = [
+    'https://loopita.com',
+    'https://www.loopita.com'
+  ];
 
-    const title = await page.title();
+  let hasError = false;
 
-    console.log('URL:', url);
-    console.log('Status:', response ? response.status() : 'no response');
-    console.log('Title:', title);
+  for (const url of urls) {
+    const page = await context.newPage();
 
-    if (!response || response.status() >= 400) {
-      throw new Error(`Bad response for ${url}`);
+    try {
+      const response = await page.goto(url, {
+        waitUntil: 'commit',
+        timeout: 30000,
+      });
+
+      const status = response ? response.status() : 'no response';
+      const finalUrl = page.url();
+
+      console.log('---');
+      console.log('INPUT URL:', url);
+      console.log('FINAL URL:', finalUrl);
+      console.log('STATUS:', status);
+
+      if (!response || status >= 400) {
+        throw new Error(`Bad response`);
+      }
+
+      console.log('CHECK_OK');
+
+    } catch (error) {
+      console.error('CHECK_FAILED:', url);
+      console.error(error.message);
+      hasError = true;
     }
 
-    console.log('PUBLIC_CHECK_OK');
-  } catch (error) {
-    console.error('PUBLIC_CHECK_FAILED');
-    console.error(error.message);
+    await page.close();
+  }
+
+  await browser.close();
+
+  if (hasError) {
     process.exit(1);
-  } finally {
-    await browser.close();
+  } else {
+    console.log('ALL_PUBLIC_CHECKS_OK');
   }
 })();
