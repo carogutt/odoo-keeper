@@ -106,10 +106,16 @@ async function appendRunToGoogleSheet(row) {
     let content = await loginPage.content();
 
     console.log('--- LOGIN ---');
+    if (loginPageResult === 'not_run') {
+      loginPageResult = 'ok';
+      finalState = 'login_page_ok';
+    }
     console.log(site.name);
 
     if (content.includes('This database is currently locked')) {
       console.log('ODOO_LOCKED');
+      loginPageResult = 'locked';
+      finalHealth = 'reactivation_required';
 
       const reactivateButton = loginPage.getByRole('button', { name: /reactivate/i });
       await reactivateButton.click();
@@ -119,11 +125,13 @@ async function appendRunToGoogleSheet(row) {
 
       if (content.includes('Databases') && content.includes('Connect')) {
         console.log('REACTIVATION_OK_DB_LIST');
+        loginPageResult = 'reactivated';
       } else if (
         content.toLowerCase().includes('login') ||
         content.toLowerCase().includes('email')
       ) {
         console.log('REACTIVATION_OK_LOGIN');
+        loginPageResult = 'reactivated';
       } else {
         throw new Error('REACTIVATION_UNKNOWN_RESULT');
       }
@@ -226,6 +234,7 @@ try {
     console.error('LOGIN_FAILED:', site.name);
     console.error(error.message);
     hasError = true;
+    if (loginPageResult === 'not_run') loginPageResult = 'failed';
   }
 
   await loginPage.close();
