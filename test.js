@@ -1,12 +1,54 @@
 require('dotenv').config();
 const { chromium } = require('playwright');
+const { google } = require('googleapis');
+
+function getNowIso() {
+  return new Date().toISOString();
+}
+
+async function appendRunToGoogleSheet(row) {
+  const auth = new google.auth.JWT({
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+
+  await auth.authorize();
+
+  const sheets = google.sheets({ version: 'v4', auth });
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range: 'sites_runs!A:R',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [row],
+    },
+  });
+}
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
 
-  const context = await browser.newContext({
+    const context = await browser.newContext({
     ignoreHTTPSErrors: true,
   });
+
+  const startedAt = Date.now();
+  const runAt = getNowIso();
+  const triggerType = process.env.GITHUB_ACTIONS ? 'Scheduled' : 'Manual';
+
+  let publicCheckResult = 'not_run';
+  let loginPageResult = 'not_run';
+  let authResult = 'not_run';
+  let adminResult = 'not_run';
+  let actionResult = 'not_run';
+  let finalHealth = 'ok';
+  let finalState = 'failed';
+  let publicStatus = '';
+  let adminStatus = '';
+  let errorStep = '';
+  let errorDetail = '';
 
   const site = {
     name: 'loopita',
@@ -31,6 +73,9 @@ const { chromium } = require('playwright');
     });
 
     const status = response ? response.status() : 'no response';
+    publicStatus = String(status);
+    publicCheckResult = 'ok';
+    finalState = 'public_ok';
     const title = await page.title();
 
     console.log('--- PUBLIC ---');
@@ -38,6 +83,10 @@ const { chromium } = require('playwright');
 
     if (!response || status >= 400) throw new Error('Public failed');
   } catch (error) {
+    publicCheckResult = 'failed';
+    finalHealth = 'blocked';
+    errorStep = 'PUBLIC';
+    errorDetail = error.message;
     console.error('PUBLIC_FAILED:', site.name);
     console.error(error.message);
     hasError = true;
@@ -180,6 +229,39 @@ try {
   }
 
   await loginPage.close();
+
+  const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+  const runId = `${site.name}-${Date.now()}`;
+
+  const row = [
+    runId,
+    runAt,
+    site.name,
+    site.name,
+    publicCheckResult,
+    loginPageResult,
+    authResult,
+    adminResult,
+    actionResult,
+    finalHealth,
+    finalState,
+    publicStatus,
+    adminStatus,
+    errorStep,
+    errorDetail,
+    'false',
+    durationSeconds,
+    triggerType,
+  ];
+
+  try {
+    await appendRunToGoogleSheet(row);
+    console.log('SHEETS_LOG_OK');
+  } catch (sheetError) {
+    console.error('SHEETS_LOG_FAILED');
+    console.error(sheetError.message);
+  }
+
   await browser.close();
 
   if (hasError) {
