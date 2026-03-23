@@ -16,6 +16,9 @@ const { chromium } = require('playwright');
     password: process.env.ODOO_LOOPITA_PASSWORD,
   };
 
+  if (!site.email) throw new Error('MISSING_ODOO_LOOPITA_EMAIL');
+  if (!site.password) throw new Error('MISSING_ODOO_LOOPITA_PASSWORD');
+
   let hasError = false;
 
   // --- PUBLIC CHECK ---
