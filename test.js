@@ -178,6 +178,8 @@ async function appendRunToGoogleSheet(row) {
   !finalContent.toLowerCase().includes('invalid')
 ) {
   console.log('AUTH_OK');
+  authResult = 'ok';
+  finalState = 'auth_ok';
 
   const bodyText = await loginPage.textContent('body');
 
@@ -192,6 +194,9 @@ async function appendRunToGoogleSheet(row) {
     finalContent.toLowerCase().includes('website')
   ) {
     console.log('ADMIN_OK');
+    adminResult = 'ok';
+    adminStatus = 'ADMIN_OK';
+    finalState = 'admin_ok';
     // --- ACTION: OPEN WEBSITE ---
 try {
   console.log('--- ACTION: WEBSITE ---');
@@ -213,12 +218,18 @@ try {
     actionContent.toLowerCase().includes('odoo')
   ) {
     console.log('ACTION_OK');
+    actionResult = 'ok';
+    finalState = 'action_ok';
   } else {
     throw new Error('ACTION_UNKNOWN_RESULT');
   }
 
 } catch (error) {
   console.error('ACTION_FAILED');
+  actionResult = 'failed';
+  finalHealth = 'warning';
+  errorStep = 'ACTION';
+  errorDetail = error.message;
   console.error(error.message);
   hasError = true;
 }
@@ -235,6 +246,7 @@ try {
     console.error(error.message);
     hasError = true;
     if (loginPageResult === 'not_run') loginPageResult = 'failed';
+    if (authResult === 'not_run') authResult = 'failed';
   }
 
   await loginPage.close();
