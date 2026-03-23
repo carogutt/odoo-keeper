@@ -93,6 +93,7 @@ const { chromium } = require('playwright');
     await submitButton.click();
 
     await loginPage.waitForLoadState('load', { timeout: 30000 });
+    await loginPage.waitForTimeout(3000);
 
     const finalUrl = loginPage.url();
     const finalContent = await loginPage.content();
@@ -108,18 +109,66 @@ const { chromium } = require('playwright');
     }
 
     if (
-      (
-        (finalUrl.includes('/web') && !finalUrl.includes('/web/login')) ||
-        finalUrl.includes('/odoo')
-      ) &&
-      !finalContent.toLowerCase().includes('wrong login') &&
-      !finalContent.toLowerCase().includes('incorrect') &&
-      !finalContent.toLowerCase().includes('invalid')
-    ) {
-      console.log('AUTH_OK');
-    } else {
-      throw new Error('AUTH_UNKNOWN_RESULT');
-    }
+  (
+    (finalUrl.includes('/web') && !finalUrl.includes('/web/login')) ||
+    finalUrl.includes('/odoo')
+  ) &&
+  !finalContent.toLowerCase().includes('wrong login') &&
+  !finalContent.toLowerCase().includes('incorrect') &&
+  !finalContent.toLowerCase().includes('invalid')
+) {
+  console.log('AUTH_OK');
+
+  const bodyText = await loginPage.textContent('body');
+
+  if (!bodyText || bodyText.trim().length < 50) {
+    throw new Error('ADMIN_EMPTY_PAGE');
+  }
+
+  if (
+    finalContent.toLowerCase().includes('odoo') ||
+    finalContent.toLowerCase().includes('dashboard') ||
+    finalContent.toLowerCase().includes('apps') ||
+    finalContent.toLowerCase().includes('website')
+  ) {
+    console.log('ADMIN_OK');
+    // --- ACTION: OPEN WEBSITE ---
+try {
+  console.log('--- ACTION: WEBSITE ---');
+
+  await loginPage.goto('https://loopita.odoo.com/web#action=website.website_preview', {
+    waitUntil: 'load',
+    timeout: 30000,
+  });
+
+  await loginPage.waitForTimeout(3000);
+
+  const actionUrl = loginPage.url();
+  const actionContent = await loginPage.content();
+
+  console.log('ACTION_URL:', actionUrl);
+
+  if (
+    actionContent.toLowerCase().includes('website') ||
+    actionContent.toLowerCase().includes('odoo')
+  ) {
+    console.log('ACTION_OK');
+  } else {
+    throw new Error('ACTION_UNKNOWN_RESULT');
+  }
+
+} catch (error) {
+  console.error('ACTION_FAILED');
+  console.error(error.message);
+  hasError = true;
+}
+  } else {
+    throw new Error('ADMIN_UNKNOWN_RESULT');
+  }
+
+} else {
+  throw new Error('AUTH_UNKNOWN_RESULT');
+}
 
   } catch (error) {
     console.error('LOGIN_FAILED:', site.name);

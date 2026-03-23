@@ -8,6 +8,9 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    env:
+      ODOO_LOOPITA_EMAIL: ${{ secrets.ODOO_LOOPITA_EMAIL }}
+      ODOO_LOOPITA_PASSWORD: ${{ secrets.ODOO_LOOPITA_PASSWORD }}
 
     steps:
       - name: Checkout
