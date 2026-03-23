@@ -11,6 +11,9 @@ jobs:
     env:
       ODOO_LOOPITA_EMAIL: ${{ secrets.ODOO_LOOPITA_EMAIL }}
       ODOO_LOOPITA_PASSWORD: ${{ secrets.ODOO_LOOPITA_PASSWORD }}
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+      GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
+      GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
 
     steps:
       - name: Checkout
