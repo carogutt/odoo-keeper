@@ -27,10 +27,27 @@ async function appendRunToGoogleSheet(row) {
   });
 }
 
+async function sendSlackAlert(message) {
+  if (!process.env.SLACK_WEBHOOK_URL) {
+    console.log('SLACK_WEBHOOK_NOT_SET');
+    return;
+  }
+
+  const response = await fetch(process.env.SLACK_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: message }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SLACK_WEBHOOK_FAILED_${response.status}`);
+  }
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
 
-    const context = await browser.newContext({
+  const context = await browser.newContext({
     ignoreHTTPSErrors: true,
   });
 
@@ -52,7 +69,7 @@ async function appendRunToGoogleSheet(row) {
 
   const site = {
     name: 'loopita',
-    public: 'https://www.loopita.com',
+    public: 'https://www.loopita.com/fake_url',
     login: 'https://loopita.odoo.com/web/login',
     email: process.env.ODOO_LOOPITA_EMAIL,
     password: process.env.ODOO_LOOPITA_PASSWORD,
@@ -76,17 +93,22 @@ async function appendRunToGoogleSheet(row) {
     publicStatus = String(status);
     publicCheckResult = 'ok';
     finalState = 'public_ok';
+
     const title = await page.title();
 
     console.log('--- PUBLIC ---');
     console.log(site.name, status, title);
 
-    if (!response || status >= 400) throw new Error('Public failed');
+    if (!response || status >= 400) {
+      throw new Error('Public failed');
+    }
   } catch (error) {
     publicCheckResult = 'failed';
     finalHealth = 'blocked';
+    finalState = 'failed';
     errorStep = 'PUBLIC';
     errorDetail = error.message;
+
     console.error('PUBLIC_FAILED:', site.name);
     console.error(error.message);
     hasError = true;
@@ -106,10 +128,12 @@ async function appendRunToGoogleSheet(row) {
     let content = await loginPage.content();
 
     console.log('--- LOGIN ---');
+
     if (loginPageResult === 'not_run') {
       loginPageResult = 'ok';
       finalState = 'login_page_ok';
     }
+
     console.log(site.name);
 
     if (content.includes('This database is currently locked')) {
@@ -146,7 +170,9 @@ async function appendRunToGoogleSheet(row) {
 
     const emailInput = loginPage.locator('input[type="email"], input[name="login"]');
     const passwordInput = loginPage.locator('input[type="password"]');
-    const submitButton = loginPage.locator('button[type="submit"], button:has-text("Log in"), button:has-text("Login")');
+    const submitButton = loginPage.locator(
+      'button[type="submit"], button:has-text("Log in"), button:has-text("Login")'
+    );
 
     await emailInput.fill(site.email);
     await passwordInput.fill(site.password);
@@ -169,84 +195,90 @@ async function appendRunToGoogleSheet(row) {
     }
 
     if (
-  (
-    (finalUrl.includes('/web') && !finalUrl.includes('/web/login')) ||
-    finalUrl.includes('/odoo')
-  ) &&
-  !finalContent.toLowerCase().includes('wrong login') &&
-  !finalContent.toLowerCase().includes('incorrect') &&
-  !finalContent.toLowerCase().includes('invalid')
-) {
-  console.log('AUTH_OK');
-  authResult = 'ok';
-  finalState = 'auth_ok';
+      (
+        (finalUrl.includes('/web') && !finalUrl.includes('/web/login')) ||
+        finalUrl.includes('/odoo')
+      ) &&
+      !finalContent.toLowerCase().includes('wrong login') &&
+      !finalContent.toLowerCase().includes('incorrect') &&
+      !finalContent.toLowerCase().includes('invalid')
+    ) {
+      console.log('AUTH_OK');
+      authResult = 'ok';
+      finalState = 'auth_ok';
 
-  const bodyText = await loginPage.textContent('body');
+      const bodyText = await loginPage.textContent('body');
 
-  if (!bodyText || bodyText.trim().length < 50) {
-    throw new Error('ADMIN_EMPTY_PAGE');
-  }
+      if (!bodyText || bodyText.trim().length < 50) {
+        throw new Error('ADMIN_EMPTY_PAGE');
+      }
 
-  if (
-    finalContent.toLowerCase().includes('odoo') ||
-    finalContent.toLowerCase().includes('dashboard') ||
-    finalContent.toLowerCase().includes('apps') ||
-    finalContent.toLowerCase().includes('website')
-  ) {
-    console.log('ADMIN_OK');
-    adminResult = 'ok';
-    adminStatus = 'ADMIN_OK';
-    finalState = 'admin_ok';
-    // --- ACTION: OPEN WEBSITE ---
-try {
-  console.log('--- ACTION: WEBSITE ---');
+      if (
+        finalContent.toLowerCase().includes('odoo') ||
+        finalContent.toLowerCase().includes('dashboard') ||
+        finalContent.toLowerCase().includes('apps') ||
+        finalContent.toLowerCase().includes('website')
+      ) {
+        console.log('ADMIN_OK');
+        adminResult = 'ok';
+        adminStatus = 'ADMIN_OK';
+        finalState = 'admin_ok';
 
-  await loginPage.goto('https://loopita.odoo.com/web#action=website.website_preview', {
-    waitUntil: 'load',
-    timeout: 30000,
-  });
+        // --- ACTION: OPEN WEBSITE ---
+        try {
+          console.log('--- ACTION: WEBSITE ---');
 
-  await loginPage.waitForTimeout(3000);
+          await loginPage.goto('https://loopita.odoo.com/web#action=website.website_preview', {
+            waitUntil: 'load',
+            timeout: 30000,
+          });
 
-  const actionUrl = loginPage.url();
-  const actionContent = await loginPage.content();
+          await loginPage.waitForTimeout(3000);
 
-  console.log('ACTION_URL:', actionUrl);
+          const actionUrl = loginPage.url();
+          const actionContent = await loginPage.content();
 
-  if (
-    actionContent.toLowerCase().includes('website') ||
-    actionContent.toLowerCase().includes('odoo')
-  ) {
-    console.log('ACTION_OK');
-    actionResult = 'ok';
-    finalState = 'action_ok';
-  } else {
-    throw new Error('ACTION_UNKNOWN_RESULT');
-  }
+          console.log('ACTION_URL:', actionUrl);
 
-} catch (error) {
-  console.error('ACTION_FAILED');
-  actionResult = 'failed';
-  finalHealth = 'warning';
-  errorStep = 'ACTION';
-  errorDetail = error.message;
-  console.error(error.message);
-  hasError = true;
-}
-  } else {
-    throw new Error('ADMIN_UNKNOWN_RESULT');
-  }
-
-} else {
-  throw new Error('AUTH_UNKNOWN_RESULT');
-}
-
+          if (
+            actionContent.toLowerCase().includes('website') ||
+            actionContent.toLowerCase().includes('odoo')
+          ) {
+            console.log('ACTION_OK');
+            actionResult = 'ok';
+            finalState = 'action_ok';
+          } else {
+            throw new Error('ACTION_UNKNOWN_RESULT');
+          }
+        } catch (error) {
+          console.error('ACTION_FAILED');
+          actionResult = 'failed';
+          finalHealth = 'warning';
+          finalState = 'failed';
+          errorStep = 'ACTION';
+          errorDetail = error.message;
+          console.error(error.message);
+          hasError = true;
+        }
+      } else {
+        throw new Error('ADMIN_UNKNOWN_RESULT');
+      }
+    } else {
+      throw new Error('AUTH_UNKNOWN_RESULT');
+    }
   } catch (error) {
+    if (loginPageResult === 'not_run') loginPageResult = 'failed';
+    if (authResult === 'not_run') authResult = 'failed';
+    if (adminResult === 'not_run') adminResult = 'failed';
+
+    finalHealth = error.message === 'LOGIN_FAILED' ? 'login_failed' : 'warning';
+    finalState = 'failed';
+    errorStep = 'LOGIN_AUTH_ADMIN';
+    errorDetail = error.message;
+
     console.error('LOGIN_FAILED:', site.name);
     console.error(error.message);
     hasError = true;
-    if (loginPageResult === 'not_run') loginPageResult = 'failed';
-    if (authResult === 'not_run') authResult = 'failed';
   }
 
   await loginPage.close();
@@ -283,10 +315,29 @@ try {
     console.error(sheetError.message);
   }
 
+  if (hasError) {
+    const alertTitle = `🚨 Odoo Keeper: ${errorStep || 'CHECK FAILED'} - ${site.name}`;
+    const alertMessage = [
+      alertTitle,
+      `Step: ${errorStep || 'unknown'}`,
+      `Error: ${errorDetail || 'unknown'}`,
+      `Health: ${finalHealth}`,
+      `Time: ${runAt}`,
+    ].join('\n');
+
+    try {
+      await sendSlackAlert(alertMessage);
+      console.log('SLACK_ALERT_OK');
+    } catch (slackError) {
+      console.error('SLACK_ALERT_FAILED');
+      console.error(slackError.message);
+    }
+  }
+
   await browser.close();
 
   if (hasError) {
-    process.exit(1);
+    process.exitCode = 1;
   } else {
     console.log('ALL_CHECKS_OK');
   }
