@@ -135,10 +135,11 @@ async function sendSlackAlert(message) {
   let adminStatus = '';
   let errorStep = '';
   let errorDetail = '';
+  let slackSent = 'FALSE';
 
   const site = {
     name: 'loopita',
-    public: 'https://www.loopita.com7fake_url',
+    public: 'https://www.loopita.com',
     login: 'https://loopita.odoo.com/web/login',
     email: process.env.ODOO_LOOPITA_EMAIL,
     password: process.env.ODOO_LOOPITA_PASSWORD,
@@ -186,59 +187,60 @@ async function sendSlackAlert(message) {
   await page.close();
 
   if (hasError) {
-    const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
-    const runId = `${site.name}-${Date.now()}`;
+  const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+  const runId = `${site.name}-${Date.now()}`;
 
-    const row = [
-      runId,
-      runAt,
-      site.name,
-      site.name,
-      publicCheckResult,
-      loginPageResult,
-      authResult,
-      adminResult,
-      actionResult,
-      finalHealth,
-      finalState,
-      publicStatus,
-      adminStatus,
-      errorStep,
-      errorDetail,
-      'false',
-      durationSeconds,
-      triggerType,
-    ];
+  const alertTitle = `🚨 Odoo Keeper: ${errorStep || 'CHECK FAILED'} - ${site.name}`;
+  const alertMessage = [
+    alertTitle,
+    `Step: ${errorStep || 'unknown'}`,
+    `Error: ${errorDetail || 'unknown'}`,
+    `Health: ${finalHealth}`,
+    `Time: ${runAt}`,
+  ].join('\n');
 
-    try {
-      await appendRunToGoogleSheet(row);
-      console.log('SHEETS_LOG_OK');
-    } catch (sheetError) {
-      console.error('SHEETS_LOG_FAILED');
-      console.error(sheetError.message);
-    }
-
-    const alertTitle = `🚨 Odoo Keeper: ${errorStep || 'CHECK FAILED'} - ${site.name}`;
-    const alertMessage = [
-      alertTitle,
-      `Step: ${errorStep || 'unknown'}`,
-      `Error: ${errorDetail || 'unknown'}`,
-      `Health: ${finalHealth}`,
-      `Time: ${runAt}`,
-    ].join('\n');
-
-    try {
-      await sendSlackAlert(alertMessage);
-      console.log('SLACK_ALERT_OK');
-    } catch (slackError) {
-      console.error('SLACK_ALERT_FAILED');
-      console.error(slackError.message);
-    }
-
-    await browser.close();
-    process.exitCode = 1;
-    return;
+  try {
+    await sendSlackAlert(alertMessage);
+    slackSent = 'TRUE';
+    console.log('SLACK_ALERT_OK');
+  } catch (slackError) {
+    console.error('SLACK_ALERT_FAILED');
+    console.error(slackError.message);
   }
+
+  let row = [
+    runId,
+    runAt,
+    site.name,
+    site.name,
+    publicCheckResult,
+    loginPageResult,
+    authResult,
+    adminResult,
+    actionResult,
+    finalHealth,
+    finalState,
+    publicStatus,
+    adminStatus,
+    errorStep,
+    errorDetail,
+    slackSent,
+    durationSeconds,
+    triggerType,
+  ];
+
+  try {
+    await appendRunToGoogleSheet(row);
+    console.log('SHEETS_LOG_OK');
+  } catch (sheetError) {
+    console.error('SHEETS_LOG_FAILED');
+    console.error(sheetError.message);
+  }
+
+  await browser.close();
+  process.exitCode = 1;
+  return;
+}
 
   // --- LOGIN / REACTIVATION / AUTH CHECK ---
   const loginPage = await context.newPage();
@@ -423,55 +425,56 @@ async function sendSlackAlert(message) {
   await loginPage.close();
 
   const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
-  const runId = `${site.name}-${Date.now()}`;
+const runId = `${site.name}-${Date.now()}`;
 
-  const row = [
-    runId,
-    runAt,
-    site.name,
-    site.name,
-    publicCheckResult,
-    loginPageResult,
-    authResult,
-    adminResult,
-    actionResult,
-    finalHealth,
-    finalState,
-    publicStatus,
-    adminStatus,
-    errorStep,
-    errorDetail,
-    'false',
-    durationSeconds,
-    triggerType,
-  ];
+if (hasError) {
+  const alertTitle = `🚨 Odoo Keeper: ${errorStep || 'CHECK FAILED'} - ${site.name}`;
+  const alertMessage = [
+    alertTitle,
+    `Step: ${errorStep || 'unknown'}`,
+    `Error: ${errorDetail || 'unknown'}`,
+    `Health: ${finalHealth}`,
+    `Time: ${runAt}`,
+  ].join('\n');
 
   try {
-    await appendRunToGoogleSheet(row);
-    console.log('SHEETS_LOG_OK');
-  } catch (sheetError) {
-    console.error('SHEETS_LOG_FAILED');
-    console.error(sheetError.message);
+    await sendSlackAlert(alertMessage);
+    slackSent = 'TRUE';
+    console.log('SLACK_ALERT_OK');
+  } catch (slackError) {
+    console.error('SLACK_ALERT_FAILED');
+    console.error(slackError.message);
   }
+}
 
-  if (hasError) {
-    const alertTitle = `🚨 Odoo Keeper: ${errorStep || 'CHECK FAILED'} - ${site.name}`;
-    const alertMessage = [
-      alertTitle,
-      `Step: ${errorStep || 'unknown'}`,
-      `Error: ${errorDetail || 'unknown'}`,
-      `Health: ${finalHealth}`,
-      `Time: ${runAt}`,
-    ].join('\n');
+let row = [
+  runId,
+  runAt,
+  site.name,
+  site.name,
+  publicCheckResult,
+  loginPageResult,
+  authResult,
+  adminResult,
+  actionResult,
+  finalHealth,
+  finalState,
+  publicStatus,
+  adminStatus,
+  errorStep,
+  errorDetail,
+  slackSent,
+  durationSeconds,
+  triggerType,
+];
 
-    try {
-      await sendSlackAlert(alertMessage);
-      console.log('SLACK_ALERT_OK');
-    } catch (slackError) {
-      console.error('SLACK_ALERT_FAILED');
-      console.error(slackError.message);
-    }
-  }
+try {
+  await appendRunToGoogleSheet(row);
+  console.log('SHEETS_LOG_OK');
+} catch (sheetError) {
+  console.error('SHEETS_LOG_FAILED');
+  console.error(sheetError.message);
+}
 
   await browser.close();
 
