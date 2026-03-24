@@ -6,6 +6,75 @@ function getNowIso() {
   return new Date().toISOString();
 }
 
+function summarizeError(errorMessage = '') {
+  const msg = String(errorMessage);
+
+  if (msg.includes('Public failed')) {
+    return 'Public failed';
+  }
+
+  if (msg.includes('ERR_NAME_NOT_RESOLVED')) {
+    return 'Public URL could not be resolved';
+  }
+
+  if (msg.includes('net::ERR_CONNECTION_REFUSED')) {
+    return 'Public URL refused connection';
+  }
+
+  if (msg.includes('net::ERR_CONNECTION_TIMED_OUT')) {
+    return 'Public URL connection timed out';
+  }
+
+  if (msg.includes('net::ERR_CERT')) {
+    return 'Public URL SSL/certificate error';
+  }
+
+  if (
+    msg.includes('website_cookies_bar') ||
+    msg.includes('Cookies Bar') ||
+    msg.includes('subtree intercepts pointer events')
+  ) {
+    return 'Cookies popup blocked login button';
+  }
+
+  if (
+    msg.includes('locator.click: Timeout') &&
+    msg.includes('button[type="submit"]')
+  ) {
+    return 'Login timeout on submit button';
+  }
+
+  if (msg.includes('LOGIN_FAILED')) {
+    return 'Invalid login';
+  }
+
+  if (msg.includes('AUTH_UNKNOWN_RESULT')) {
+    return 'Auth result unknown';
+  }
+
+  if (msg.includes('ADMIN_UNKNOWN_RESULT')) {
+    return 'Admin result unknown';
+  }
+
+  if (msg.includes('ACTION_UNKNOWN_RESULT')) {
+    return 'Action result unknown';
+  }
+
+  if (msg.includes('DB_LIST_SCREEN')) {
+    return 'Database list screen shown';
+  }
+
+  if (msg.includes('REACTIVATION_UNKNOWN_RESULT')) {
+    return 'Reactivation result unknown';
+  }
+
+  if (msg.includes('ADMIN_EMPTY_PAGE')) {
+    return 'Admin page loaded empty';
+  }
+
+  return msg.split('\n')[0].trim().slice(0, 140);
+}
+
 async function appendRunToGoogleSheet(row) {
   const auth = new google.auth.JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -69,7 +138,7 @@ async function sendSlackAlert(message) {
 
   const site = {
     name: 'loopita',
-    public: 'https://www.loopita.com/fake_url',
+    public: 'https://www.loopita.com7fake_url',
     login: 'https://loopita.odoo.com/web/login',
     email: process.env.ODOO_LOOPITA_EMAIL,
     password: process.env.ODOO_LOOPITA_PASSWORD,
@@ -107,7 +176,7 @@ async function sendSlackAlert(message) {
     finalHealth = 'blocked';
     finalState = 'failed';
     errorStep = 'PUBLIC';
-    errorDetail = error.message;
+    errorDetail = summarizeError(error.message);
 
     console.error('PUBLIC_FAILED:', site.name);
     console.error(error.message);
@@ -115,6 +184,61 @@ async function sendSlackAlert(message) {
   }
 
   await page.close();
+
+  if (hasError) {
+    const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+    const runId = `${site.name}-${Date.now()}`;
+
+    const row = [
+      runId,
+      runAt,
+      site.name,
+      site.name,
+      publicCheckResult,
+      loginPageResult,
+      authResult,
+      adminResult,
+      actionResult,
+      finalHealth,
+      finalState,
+      publicStatus,
+      adminStatus,
+      errorStep,
+      errorDetail,
+      'false',
+      durationSeconds,
+      triggerType,
+    ];
+
+    try {
+      await appendRunToGoogleSheet(row);
+      console.log('SHEETS_LOG_OK');
+    } catch (sheetError) {
+      console.error('SHEETS_LOG_FAILED');
+      console.error(sheetError.message);
+    }
+
+    const alertTitle = `🚨 Odoo Keeper: ${errorStep || 'CHECK FAILED'} - ${site.name}`;
+    const alertMessage = [
+      alertTitle,
+      `Step: ${errorStep || 'unknown'}`,
+      `Error: ${errorDetail || 'unknown'}`,
+      `Health: ${finalHealth}`,
+      `Time: ${runAt}`,
+    ].join('\n');
+
+    try {
+      await sendSlackAlert(alertMessage);
+      console.log('SLACK_ALERT_OK');
+    } catch (slackError) {
+      console.error('SLACK_ALERT_FAILED');
+      console.error(slackError.message);
+    }
+
+    await browser.close();
+    process.exitCode = 1;
+    return;
+  }
 
   // --- LOGIN / REACTIVATION / AUTH CHECK ---
   const loginPage = await context.newPage();
@@ -124,6 +248,21 @@ async function sendSlackAlert(message) {
       waitUntil: 'load',
       timeout: 30000,
     });
+
+    // --- HANDLE COOKIES ---
+  try {
+    const acceptCookies = loginPage.locator(
+      'button:has-text("Accept"), button:has-text("Aceptar"), button:has-text("Agree")'
+    );
+
+    if (await acceptCookies.first().isVisible({ timeout: 3000 })) {
+      await acceptCookies.first().click();
+      await loginPage.waitForTimeout(1000);
+      console.log('COOKIES_ACCEPTED');
+    }
+  } catch (e) {
+    console.log('NO_COOKIES_POPUP');
+  }
 
     let content = await loginPage.content();
 
@@ -256,7 +395,7 @@ async function sendSlackAlert(message) {
           finalHealth = 'warning';
           finalState = 'failed';
           errorStep = 'ACTION';
-          errorDetail = error.message;
+          errorDetail = summarizeError(error.message);
           console.error(error.message);
           hasError = true;
         }
@@ -274,7 +413,7 @@ async function sendSlackAlert(message) {
     finalHealth = error.message === 'LOGIN_FAILED' ? 'login_failed' : 'warning';
     finalState = 'failed';
     errorStep = 'LOGIN_AUTH_ADMIN';
-    errorDetail = error.message;
+    errorDetail = summarizeError(error.message);
 
     console.error('LOGIN_FAILED:', site.name);
     console.error(error.message);
