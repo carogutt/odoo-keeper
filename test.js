@@ -352,6 +352,8 @@ function getSiteCredentials(activeSite) {
     (item) => String(item.is_active).toLowerCase() === 'true'
   );
 
+  console.log('ACTIVE SITES COUNT:', activeSites.length);
+
   if (!activeSites.length) {
     throw new Error('NO_ACTIVE_SITES_FOUND');
   }
