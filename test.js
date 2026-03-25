@@ -216,21 +216,28 @@ function buildSlackAlertMessage({
 // --- HANDLE COOKIES ---
 async function dismissCookiesBanner(page) {
   const cookieSelectors = [
+    'button:has-text("Permitir todas las cookies")',
+    'button:has-text("Permitir solo las cookies necesarias")',
+    'button:has-text("Allow all cookies")',
+    'button:has-text("Allow only needed cookies")',
     'button:has-text("Accept")',
     'button:has-text("Aceptar")',
     'button:has-text("Agree")',
     'button:has-text("Acepto")',
     'button:has-text("Aceptar todo")',
     '#website_cookies_bar button',
+    '.modal.show button',
+    '.oe_website_sale button',
   ];
 
   for (const selector of cookieSelectors) {
     try {
       const btn = page.locator(selector).first();
-      if (await btn.isVisible({ timeout: 1500 })) {
-        await btn.click({ timeout: 3000 });
-        await page.waitForTimeout(1000);
-        console.log('COOKIES_ACCEPTED');
+
+      if (await btn.isVisible({ timeout: 2500 })) {
+        await btn.click({ timeout: 5000, force: true });
+        await page.waitForTimeout(1500);
+        console.log(`COOKIES_ACCEPTED: ${selector}`);
         return true;
       }
     } catch (e) {}
@@ -338,6 +345,8 @@ function getSiteCredentials(activeSite) {
   });
 
   const sites = await getSitesConfig();
+
+  /*console.log('SITES RAW:', JSON.stringify(sites, null, 2));*/
 
   const activeSites = sites.filter(
     (item) => String(item.is_active).toLowerCase() === 'true'
