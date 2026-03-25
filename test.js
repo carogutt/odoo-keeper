@@ -240,7 +240,9 @@ async function dismissCookiesBanner(page) {
         console.log(`COOKIES_ACCEPTED: ${selector}`);
         return true;
       }
-    } catch (e) {}
+    } catch (e) {
+      // ignore and try next selector
+    }
   }
 
   console.log('NO_COOKIES_POPUP');
@@ -346,13 +348,9 @@ function getSiteCredentials(activeSite) {
 
   const sites = await getSitesConfig();
 
-  /*console.log('SITES RAW:', JSON.stringify(sites, null, 2));*/
-
   const activeSites = sites.filter(
     (item) => String(item.is_active).toLowerCase() === 'true'
   );
-
-  console.log('ACTIVE SITES COUNT:', activeSites.length);
 
   if (!activeSites.length) {
     throw new Error('NO_ACTIVE_SITES_FOUND');
