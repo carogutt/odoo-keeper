@@ -437,7 +437,41 @@ function getSiteCredentials(activeSite) {
 
     await page.close();
 
+    let secondaryCheck = '';
+
+    if (hasError && errorStep === 'PUBLIC' && site.odooSubdomain) {
+      const secondaryPage = await context.newPage();
+
+      try {
+        const response = await secondaryPage.goto(site.odooSubdomain, {
+          waitUntil: 'commit',
+          timeout: 10000,
+        });
+
+        const status = response ? response.status() : 0;
+
+        if (response && status < 500) {
+          secondaryCheck = 'odoo_subdomain_ok';
+          console.log('SECONDARY_CHECK_OK:', site.odooSubdomain, status);
+        } else {
+          secondaryCheck = 'odoo_subdomain_failed';
+          console.log('SECONDARY_CHECK_FAILED_STATUS:', site.odooSubdomain, status);
+        }
+      } catch (e) {
+        secondaryCheck = 'odoo_subdomain_failed';
+        console.log('SECONDARY_CHECK_FAILED:', site.odooSubdomain);
+      }
+
+      await secondaryPage.close();
+    }
+
     if (hasError) {
+      if (errorStep === 'PUBLIC' && secondaryCheck === 'odoo_subdomain_ok') {
+        errorCode = 'DOMAIN_OR_DNS_ISSUE';
+        errorMessage = 'Public domain failed, but Odoo subdomain is reachable';
+        finalHealth = 'warning';
+      }
+      
       const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
       const runId = `${site.id}-${Date.now()}`;
 
